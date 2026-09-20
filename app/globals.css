@@ -43,3 +43,55 @@ a {
   color: inherit;
   text-decoration: none;
 }
+
+.nav-popup {
+  opacity: 0;
+  transform: translateY(0.75rem);
+  transition: opacity 200ms ease, transform 200ms ease,
+    display 200ms allow-discrete, overlay 200ms allow-discrete;
+}
+
+details[open] > .nav-popup {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@starting-style {
+  details[open] > .nav-popup {
+    opacity: 0;
+    transform: translateY(0.75rem);
+  }
+}
+
+.day-modal {
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+.day-modal.is-open {
+  opacity: 1;
+}
+
+@starting-style {
+  .day-modal.is-open {
+    opacity: 0;
+  }
+}
+
+.day-modal-panel {
+  opacity: 0;
+  transform: translateY(0.75rem);
+  transition: opacity 200ms ease, transform 200ms ease;
+}
+
+.day-modal-panel.is-open {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@starting-style {
+  .day-modal-panel.is-open {
+    opacity: 0;
+    transform: translateY(0.75rem);
+  }
+}

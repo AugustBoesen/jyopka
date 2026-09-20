@@ -45,15 +45,17 @@ export interface KideEventCard {
   url: string;
   organizationId: string;
   organizationName: string;
+  organizationLogoUrl: string | null;
   place: string;
   windowLabel: string;
   salesLabel: string;
   priceLabel: string;
   availabilityLabel: string;
-  favoritedLabel: string;
   salesState: 'live' | 'upcoming' | 'paused' | 'ended';
   startAt: string | null;
   endAt: string | null;
+  /** Local calendar date (YYYY-MM-DD) the event starts on, in the event's own time zone. */
+  dateKey: string | null;
 }
 
 export interface KideOrganizationFeed {
@@ -153,39 +155,54 @@ function buildSalesLabel(event: KideCompanyEvent) {
   return salesStart ? `Sales open ${salesStart}` : 'Upcoming';
 }
 
-function buildWindowLabel(event: KideCompanyEvent) {
-  const start = formatDateTime(event.dateActualFrom, event.timeZone);
-  const end = formatDateTime(event.dateActualUntil, event.timeZone);
-
-  if (start && end) {
-    return `${start} - ${end}`;
+function formatDateKey(value: string | undefined, timeZone?: string) {
+  if (!value) {
+    return null;
   }
 
-  return start ?? end ?? 'Date not published';
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return new Intl.DateTimeFormat('en-CA', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    timeZone,
+  }).format(date);
+}
+
+function buildWindowLabel(event: KideCompanyEvent) {
+  return (
+    formatDateTime(event.dateActualFrom, event.timeZone) ??
+    formatDateTime(event.dateActualUntil, event.timeZone) ??
+    'Date not published'
+  );
 }
 
 function mapEvent(
   event: KideCompanyEvent,
   organization: KideOrganization,
+  organizationLogoUrl: string | null,
 ): KideEventCard {
   return {
     id: event.id,
+    dateKey: formatDateKey(event.dateActualFrom, event.timeZone),
     title: event.name ?? 'Untitled event',
     url: `https://kide.app/events/${event.id}/details`,
     organizationId: organization.id,
     organizationName: organization.name,
+    organizationLogoUrl,
     place: event.place ?? 'Location unavailable',
     windowLabel: buildWindowLabel(event),
     salesLabel: buildSalesLabel(event),
     priceLabel: buildPriceLabel(event),
     availabilityLabel:
       typeof event.availability === 'number'
-        ? `${event.availability} available`
+        ? `${event.availability}`
         : 'Availability unavailable',
-    favoritedLabel:
-      typeof event.favoritedTimes === 'number'
-        ? `${event.favoritedTimes} saved`
-        : 'Not tracked',
     salesState: getSalesState(event),
     startAt: event.dateActualFrom ?? null,
     endAt: event.dateActualUntil ?? null,
@@ -214,7 +231,7 @@ export async function fetchKideOrganizationFeeds(
       const companyName = payload.model?.company?.name ?? organization.name;
       const logoUrl = buildLogoUrl(payload.model?.company?.mediaFilename);
       const events = (payload.model?.events ?? [])
-        .map((event) => mapEvent(event, organization))
+        .map((event) => mapEvent(event, organization, logoUrl))
         .sort((first, second) => {
           const firstTime = first.startAt
             ? new Date(first.startAt).getTime()

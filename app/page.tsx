@@ -3,11 +3,16 @@ import type { ReactNode } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 
+import { EventCalendar } from '@/app/components/EventCalendar';
 import {
   sortedKideOrganizationCategories,
   sortedKideOrganizations,
 } from '@/lib/kide-organizations';
-import { fetchKideOrganizationFeeds, flattenFeeds } from '@/lib/kide';
+import {
+  fetchKideOrganizationFeeds,
+  flattenFeeds,
+  type KideEventCard,
+} from '@/lib/kide';
 
 type EventStatusFilter = 'live' | 'upcoming';
 
@@ -24,6 +29,10 @@ function parseSelectedCategory(searchParams: QueryParams) {
 
 function parseSelectedOrganization(searchParams: QueryParams) {
   return firstQueryValue(searchParams.organization);
+}
+
+function parseSearchQuery(searchParams: QueryParams) {
+  return firstQueryValue(searchParams.q);
 }
 
 function parseSelectedStatuses(searchParams: QueryParams) {
@@ -51,10 +60,12 @@ function buildQueryHref({
   categoryId,
   organizationId,
   statusIds,
+  searchQuery,
 }: {
   categoryId?: string | null;
   organizationId?: string | null;
   statusIds?: readonly EventStatusFilter[];
+  searchQuery?: string | null;
 }) {
   const query = new URLSearchParams();
 
@@ -68,6 +79,10 @@ function buildQueryHref({
 
   if (statusIds && statusIds.length > 0) {
     query.set('status', statusIds.join(','));
+  }
+
+  if (searchQuery) {
+    query.set('q', searchQuery);
   }
 
   const queryString = query.toString();
@@ -95,32 +110,12 @@ function getVisibleStatus(state: string): EventStatusFilter | null {
   return null;
 }
 
-function getSalesTone(state: string) {
-  switch (state) {
-    case 'live':
-      return 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200';
-    case 'paused':
-      return 'border-amber-400/30 bg-amber-400/10 text-amber-200';
-    case 'ended':
-      return 'border-rose-400/30 bg-rose-400/10 text-rose-200';
-    default:
-      return 'border-sky-400/30 bg-sky-400/10 text-sky-200';
-  }
-}
+function matchesSearchQuery(event: KideEventCard, normalizedQuery: string) {
+  const haystack = `${event.title} ${event.organizationName} ${event.place}`
+    .trim()
+    .toLowerCase();
 
-function getSalesStatusLabel(state: string) {
-  switch (state) {
-    case 'live':
-      return 'Open';
-    case 'upcoming':
-      return 'Upcoming';
-    case 'paused':
-      return 'Paused';
-    case 'ended':
-      return 'Ended';
-    default:
-      return 'Unknown';
-  }
+  return haystack.includes(normalizedQuery);
 }
 
 function getOrganizationLogo(
@@ -152,6 +147,8 @@ export default async function Home({ searchParams }: PageProps<'/'>) {
   const selectedOrganizationId =
     parseSelectedOrganization(resolvedSearchParams);
   const selectedStatuses = parseSelectedStatuses(resolvedSearchParams);
+  const selectedSearchQuery = parseSearchQuery(resolvedSearchParams);
+  const normalizedSearchQuery = selectedSearchQuery?.toLowerCase() ?? null;
   const categoryFromOrganization = selectedOrganizationId
     ? findCategoryForOrganization(selectedOrganizationId)?.id ?? null
     : null;
@@ -168,7 +165,7 @@ export default async function Home({ searchParams }: PageProps<'/'>) {
       )?.organizations ?? []
     : sortedKideOrganizations;
 
-  const sortedOrganizationsInScope = [...organizationsInScope].sort(
+  const sortedAllOrganizations = [...sortedKideOrganizations].sort(
     (first, second) => {
       const firstFeed = feedByOrganizationId.get(first.id);
       const secondFeed = feedByOrganizationId.get(second.id);
@@ -197,15 +194,23 @@ export default async function Home({ searchParams }: PageProps<'/'>) {
       );
 
   const visibleFeeds =
-    selectedStatuses.length > 0
+    selectedStatuses.length > 0 || normalizedSearchQuery
       ? scopedFeeds
           .map((feed) => ({
             ...feed,
             events: feed.events.filter((event) => {
               const visibleStatus = getVisibleStatus(event.salesState);
-              return visibleStatus
-                ? selectedStatuses.includes(visibleStatus)
-                : false;
+              const matchesStatus =
+                selectedStatuses.length > 0
+                  ? visibleStatus
+                    ? selectedStatuses.includes(visibleStatus)
+                    : false
+                  : true;
+              const matchesSearch = normalizedSearchQuery
+                ? matchesSearchQuery(event, normalizedSearchQuery)
+                : true;
+
+              return matchesStatus && matchesSearch;
             }),
           }))
           .filter((feed) => feed.events.length > 0)
@@ -217,327 +222,301 @@ export default async function Home({ searchParams }: PageProps<'/'>) {
         (feed) => feed.organization.id === selectedOrganizationId,
       ) ?? null
     : null;
-  const liveCount = visibleEvents.filter(
-    (event) => event.salesState === 'live',
-  ).length;
-  const upcomingCount = visibleEvents.filter(
-    (event) => event.salesState === 'upcoming',
-  ).length;
+
+  const activeFilterCount =
+    (activeCategoryId ? 1 : 0) +
+    (selectedOrganizationId ? 1 : 0) +
+    (selectedStatuses.length > 0 ? 1 : 0);
 
   return (
     <main className="relative min-h-screen overflow-hidden px-4 py-8 text-slate-100 sm:px-6 lg:px-8 lg:py-12">
       <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,_rgba(251,191,36,0.16),_transparent_32%),radial-gradient(circle_at_top_right,_rgba(56,189,248,0.16),_transparent_28%),linear-gradient(180deg,_rgba(15,23,42,0.78)_0%,_rgba(2,6,23,0.96)_100%)]" />
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-8">
-        <section className="rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl shadow-slate-950/40 backdrop-blur-xl sm:p-8">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-3xl space-y-4">
-              <span className="inline-flex rounded-full border border-green-400/20 bg-green-400/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.24em] text-green-100">
-                Kide.app: online
-              </span>
-              <div className="space-y-3">
-                <h1 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-                  Stunite :Ddd
-                </h1>
-                <p className="max-w-2xl text-base leading-7 text-slate-300 sm:text-lg">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <NavMenu
+              label={
+                <>
+                  <FilterIcon />
+                  <span className="sr-only">Suodattimet</span>
+                  {activeFilterCount > 0 ? (
+                    <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-400/30 px-1 text-[0.65rem] font-semibold text-amber-50">
+                      {activeFilterCount}
+                    </span>
+                  ) : null}
+                </>
+              }
+            >
+              <FilterGroup label="Korkeakoulut">
+                <FilterChip
+                  href={buildQueryHref({
+                    statusIds: selectedStatuses,
+                    searchQuery: selectedSearchQuery,
+                  })}
+                  active={!activeCategoryId}
+                >
+                  Kaikki
+                </FilterChip>
+
+                {sortedKideOrganizationCategories.map((category) => (
+                  <FilterChip
+                    key={category.id}
+                    href={buildQueryHref({
+                      categoryId: category.id,
+                      statusIds: selectedStatuses,
+                      searchQuery: selectedSearchQuery,
+                    })}
+                    active={activeCategoryId === category.id}
+                  >
+                    {category.name}
+                  </FilterChip>
+                ))}
+              </FilterGroup>
+
+              <FilterGroup label="Aine- ja koulutusalajärjestöt">
+                <FilterChip
+                  href={buildQueryHref({
+                    categoryId: activeCategoryId,
+                    statusIds: selectedStatuses,
+                    searchQuery: selectedSearchQuery,
+                  })}
+                  active={!selectedOrganizationId}
+                >
+                  All organizations
+                </FilterChip>
+
+                {sortedAllOrganizations.map((organization) => {
+                  const feed = feedByOrganizationId.get(organization.id);
+                  const logoUrl = getOrganizationLogo(
+                    feedByOrganizationId,
+                    organization.id,
+                  );
+                  const displayName = getOrganizationDisplayName({
+                    configuredName: organization.name,
+                    fetchedName: feed?.companyName,
+                  });
+                  const belongsToActiveCategory =
+                    !activeCategoryId ||
+                    organizationsInScope.some(
+                      (scoped) => scoped.id === organization.id,
+                    );
+                  const isSelected = selectedOrganizationId === organization.id;
+
+                  return (
+                    <FilterChip
+                      key={organization.id}
+                      href={buildQueryHref({
+                        categoryId:
+                          findCategoryForOrganization(organization.id)?.id ??
+                          activeCategoryId,
+                        organizationId: organization.id,
+                        statusIds: selectedStatuses,
+                        searchQuery: selectedSearchQuery,
+                      })}
+                      active={isSelected}
+                      muted={!belongsToActiveCategory}
+                      highlighted={
+                        Boolean(activeCategoryId) &&
+                        belongsToActiveCategory &&
+                        !isSelected
+                      }
+                    >
+                      <OrganizationMark
+                        name={displayName}
+                        logoUrl={logoUrl}
+                        compact
+                      />
+                    </FilterChip>
+                  );
+                })}
+              </FilterGroup>
+
+              <FilterGroup label="Tila">
+                <FilterChip
+                  href={buildQueryHref({
+                    categoryId: activeCategoryId,
+                    organizationId: selectedOrganizationId,
+                    searchQuery: selectedSearchQuery,
+                  })}
+                  active={selectedStatuses.length === 0}
+                >
+                  Kaikki tapahtumat
+                </FilterChip>
+
+                {(['live', 'upcoming'] as const).map((status) => {
+                  const nextStatuses = toggleStatusFilter(
+                    selectedStatuses,
+                    status,
+                  );
+
+                  return (
+                    <FilterChip
+                      key={status}
+                      href={buildQueryHref({
+                        categoryId: activeCategoryId,
+                        organizationId: selectedOrganizationId,
+                        statusIds: nextStatuses,
+                        searchQuery: selectedSearchQuery,
+                      })}
+                      active={selectedStatuses.includes(status)}
+                    >
+                      {status === 'live' ? 'Myynnissä nyt' : 'Tulossa'}
+                    </FilterChip>
+                  );
+                })}
+              </FilterGroup>
+            </NavMenu>
+
+            <NavMenu
+              label={
+                <>
+                  <SearchIcon />
+                  <span className="sr-only">Haku</span>
+                  {selectedSearchQuery ? (
+                    <span
+                      aria-hidden="true"
+                      className="h-1.5 w-1.5 rounded-full bg-amber-300"
+                    />
+                  ) : null}
+                </>
+              }
+            >
+              <form
+                action="/"
+                method="get"
+                className="flex flex-col gap-3 sm:flex-row sm:items-center"
+              >
+                {activeCategoryId ? (
+                  <input
+                    type="hidden"
+                    name="category"
+                    value={activeCategoryId}
+                  />
+                ) : null}
+                {selectedOrganizationId ? (
+                  <input
+                    type="hidden"
+                    name="organization"
+                    value={selectedOrganizationId}
+                  />
+                ) : null}
+                {selectedStatuses.length > 0 ? (
+                  <input
+                    type="hidden"
+                    name="status"
+                    value={selectedStatuses.join(',')}
+                  />
+                ) : null}
+
+                <label htmlFor="event-search" className="sr-only">
+                  Hae tapahtumia
+                </label>
+                <input
+                  id="event-search"
+                  type="search"
+                  name="q"
+                  defaultValue={selectedSearchQuery ?? ''}
+                  placeholder="Hae tapahtuman nimellä, järjestöllä tai paikalla…"
+                  className="w-full rounded-full border border-white/10 bg-slate-950/60 px-4 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:border-amber-300/40 focus:outline-none focus:ring-2 focus:ring-amber-300/30"
+                />
+
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    className="inline-flex items-center justify-center rounded-full border border-amber-300/40 bg-amber-400/15 px-4 py-2.5 text-sm font-medium text-amber-50 transition hover:border-amber-300/60 hover:bg-amber-400/25"
+                  >
+                    Hae
+                  </button>
+                  {selectedSearchQuery ? (
+                    <Link
+                      href={buildQueryHref({
+                        categoryId: activeCategoryId,
+                        organizationId: selectedOrganizationId,
+                        statusIds: selectedStatuses,
+                      })}
+                      className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/[0.03] px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:border-white/20 hover:bg-white/[0.08]"
+                    >
+                      Tyhjennä
+                    </Link>
+                  ) : null}
+                </div>
+              </form>
+            </NavMenu>
+
+            <NavMenu
+              label={
+                <>
+                  <span aria-hidden="true" className="text-sm font-bold">
+                    ?
+                  </span>
+                  <span className="sr-only">Tietoa sivustosta</span>
+                </>
+              }
+            >
+              <div className="space-y-3 text-sm leading-6 text-slate-300">
+                <p>
                   Tälle sivulle suodattuvat Jyväskylän alueen korkeakoulujen
                   alaisten opiskelijajärjestöjen kide app-tapahtumat. Voit hakea
                   tapahtumia korkeakoulun, järjestön sekä saatavuuden mukaan.
+                </p>
+                <p>
                   Sivu on epävirallinen eikä ole osa Treanglo Oy:n tai
                   Kide.appin virallista palvelua.
                 </p>
               </div>
-            </div>
+            </NavMenu>
+          </div>
+        </div>
 
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:min-w-[34rem]">
-              <StatCard
-                label="Tapahtumia näkyvillä"
-                value={visibleEvents.length.toString()}
+        <section className="rounded-[2rem] border border-white/10 bg-white/5 p-3 shadow-xl shadow-slate-950/30 backdrop-blur-xl sm:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+            {selectedFeed ? (
+              <OrganizationMark
+                name={selectedFeed.companyName}
+                logoUrl={selectedFeed.logoUrl}
+                compact
               />
-              <StatCard label="Myynnissä nyt" value={liveCount.toString()} />
-              <StatCard label="Tulossa" value={upcomingCount.toString()} />
+            ) : (
+              <h2 className="text-lg font-semibold text-white">
+                JKL Opiskelijajärjestöjen tapahtumat
+              </h2>
+            )}
+            <div className="text-sm text-slate-400">
+              {visibleEvents.length} event
+              {visibleEvents.length === 1 ? '' : 's'}
             </div>
           </div>
-        </section>
 
-        <CollapsibleFilterSection
-          title="Korkeakoulut"
-          description="Voit suodattaa tapahtumia ja järjestöjä korkeakoulun mukaan."
-        >
-          <FilterChip
-            href={buildQueryHref({ statusIds: selectedStatuses })}
-            active={!activeCategoryId}
-          >
-            Kaikki
-          </FilterChip>
-
-          {sortedKideOrganizationCategories.map((category) => (
-            <FilterChip
-              key={category.id}
-              href={buildQueryHref({
-                categoryId: category.id,
-                statusIds: selectedStatuses,
-              })}
-              active={activeCategoryId === category.id}
-            >
-              {category.name}
-            </FilterChip>
-          ))}
-        </CollapsibleFilterSection>
-
-        <CollapsibleFilterSection
-          title="Aine- ja koulutusalajärjestöt"
-          description="Valitse järjestö tarkastellaksesi vain sen tapahtumia."
-        >
-          <FilterChip
-            href={buildQueryHref({
-              categoryId: activeCategoryId,
-              statusIds: selectedStatuses,
-            })}
-            active={!selectedOrganizationId}
-          >
-            All organizations
-          </FilterChip>
-
-          {sortedOrganizationsInScope.map((organization) => {
-            const feed = feedByOrganizationId.get(organization.id);
-            const logoUrl = getOrganizationLogo(
-              feedByOrganizationId,
-              organization.id,
-            );
-            const displayName = getOrganizationDisplayName({
-              configuredName: organization.name,
-              fetchedName: feed?.companyName,
-            });
-
-            return (
-              <FilterChip
-                key={organization.id}
-                href={buildQueryHref({
-                  categoryId:
-                    findCategoryForOrganization(organization.id)?.id ??
-                    activeCategoryId,
-                  organizationId: organization.id,
-                  statusIds: selectedStatuses,
-                })}
-                active={selectedOrganizationId === organization.id}
-              >
-                <OrganizationMark
-                  name={displayName}
-                  logoUrl={logoUrl}
-                  compact
-                />
-              </FilterChip>
-            );
-          })}
-        </CollapsibleFilterSection>
-
-        <CollapsibleFilterSection
-          title="Status"
-          description="Voit erikseen valita tapahtumat, jotka ovat myynnissä tai tulevat myyntiin."
-        >
-          <FilterChip
-            href={buildQueryHref({
-              categoryId: activeCategoryId,
-              organizationId: selectedOrganizationId,
-            })}
-            active={selectedStatuses.length === 0}
-          >
-            Kaikki tapahtumat
-          </FilterChip>
-
-          {(['live', 'upcoming'] as const).map((status) => {
-            const nextStatuses = toggleStatusFilter(selectedStatuses, status);
-
-            return (
-              <FilterChip
-                key={status}
-                href={buildQueryHref({
-                  categoryId: activeCategoryId,
-                  organizationId: selectedOrganizationId,
-                  statusIds: nextStatuses,
-                })}
-                active={selectedStatuses.includes(status)}
-              >
-                {status === 'live' ? 'Myynnissä nyt' : 'Tulossa'}
-              </FilterChip>
-            );
-          })}
-        </CollapsibleFilterSection>
-
-        <div className="space-y-6">
-          {selectedFeed ? (
-            <section className="rounded-[2rem] border border-white/10 bg-white/5 p-5 shadow-xl shadow-slate-950/30 backdrop-blur-xl sm:p-6">
-              <div className="flex flex-col gap-3 border-b border-white/10 pb-5 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <OrganizationMark
-                    name={selectedFeed.companyName}
-                    logoUrl={selectedFeed.logoUrl}
-                  />
-                  {selectedFeed.organization.description ? (
-                    <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
-                      {selectedFeed.organization.description}
-                    </p>
-                  ) : null}
-                </div>
-                <div className="text-sm text-slate-400">
-                  {selectedFeed.events.length} event
-                  {selectedFeed.events.length === 1 ? '' : 's'}
-                </div>
-              </div>
-
-              {selectedFeed.error ? (
-                <div className="mt-5 rounded-2xl border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-100">
-                  {selectedFeed.error}
-                </div>
-              ) : selectedFeed.events.length === 0 ? (
-                <div className="mt-5 rounded-2xl border border-dashed border-white/10 bg-white/[0.03] p-8 text-sm text-slate-300">
-                  No public events found for this organization.
-                </div>
-              ) : (
-                <div className="mt-5 flex flex-col gap-4">
-                  {selectedFeed.events.map((event) => (
-                    <EventCard key={event.id} event={event} />
-                  ))}
-                </div>
-              )}
-            </section>
-          ) : visibleFeeds.length > 0 ? (
-            <section className="rounded-[2rem] border border-white/10 bg-white/5 p-5 shadow-xl shadow-slate-950/30 backdrop-blur-xl sm:p-6">
-              <div className="flex flex-col gap-3 border-b border-white/10 pb-5 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <h2 className="text-2xl font-semibold text-white">
-                    Kaikki tapahtumat
-                  </h2>
-                  <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
-                    Järjestö näkyy jokaisessa tapahtumakortissa, joten usean
-                    järjestön näkymä on koottu yhdeksi listaksi.
-                  </p>
-                </div>
-                <div className="text-sm text-slate-400">
-                  {visibleEvents.length} event
-                  {visibleEvents.length === 1 ? '' : 's'}
-                </div>
-              </div>
-
-              <div className="mt-5 flex flex-col gap-4">
-                {visibleEvents.map((event) => (
-                  <EventCard key={event.id} event={event} />
-                ))}
-              </div>
-            </section>
-          ) : null}
-
-          {visibleFeeds.length === 0 ? (
-            <section className="rounded-[2rem] border border-dashed border-white/10 bg-white/[0.03] p-10 text-center text-slate-300 shadow-xl shadow-slate-950/30 backdrop-blur-xl">
+          {selectedFeed?.error ? (
+            <div className="mt-5 rounded-2xl border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-100">
+              {selectedFeed.error}
+            </div>
+          ) : visibleEvents.length === 0 ? (
+            <div className="mt-5 rounded-2xl border border-dashed border-white/10 bg-white/[0.03] p-8 text-center text-sm text-slate-300">
               No organizations or events match the current filters.
-            </section>
-          ) : null}
-        </div>
+            </div>
+          ) : (
+            <div className="mt-5">
+              <EventCalendar events={visibleEvents} />
+            </div>
+          )}
+        </section>
       </div>
     </main>
-  );
-}
-
-function EventCard({
-  event,
-}: {
-  event: Awaited<
-    ReturnType<typeof fetchKideOrganizationFeeds>
-  >[number]['events'][number];
-}) {
-  return (
-    <article className="rounded-3xl border border-white/10 bg-slate-900/70 p-5 transition duration-300 hover:border-white/20 hover:bg-slate-900/90">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-[0.24em] text-slate-400">
-            {event.organizationName}
-          </p>
-          <h3 className="mt-2 text-xl font-semibold leading-tight text-white">
-            {event.title}
-          </h3>
-        </div>
-        <span
-          className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium ${getSalesTone(
-            event.salesState,
-          )}`}
-        >
-          {getSalesStatusLabel(event.salesState)}
-        </span>
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-4 text-sm">
-        <span className="text-slate-400">{event.salesLabel}</span>
-        <a
-          href={event.url}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center rounded-full border border-amber-400/20 bg-amber-400/10 px-4 py-2 font-medium text-amber-100 transition hover:border-amber-300/40 hover:bg-amber-400/20"
-        >
-          Open on Kide
-        </a>
-      </div>
-
-      <details className="group/details rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
-        <summary className="cursor-pointer list-none text-sm font-medium text-slate-200 marker:hidden">
-          <span className="group-open/details:hidden">Show details</span>
-          <span className="hidden group-open/details:inline">Hide details</span>
-        </summary>
-
-        <dl className="mt-4 space-y-3 text-sm text-slate-300">
-          <div className="flex items-start justify-between gap-4">
-            <dt className="text-slate-400">Date</dt>
-            <dd className="text-right font-medium text-slate-100">
-              {event.windowLabel}
-            </dd>
-          </div>
-          <div className="flex items-start justify-between gap-4">
-            <dt className="text-slate-400">Location</dt>
-            <dd className="text-right font-medium text-slate-100">
-              {event.place}
-            </dd>
-          </div>
-          <div className="flex items-start justify-between gap-4">
-            <dt className="text-slate-400">Price</dt>
-            <dd className="text-right font-medium text-slate-100">
-              {event.priceLabel}
-            </dd>
-          </div>
-          <div className="flex items-start justify-between gap-4">
-            <dt className="text-slate-400">Availability</dt>
-            <dd className="text-right font-medium text-slate-100">
-              {event.availabilityLabel}
-            </dd>
-          </div>
-          <div className="flex items-start justify-between gap-4">
-            <dt className="text-slate-400">Interest</dt>
-            <dd className="text-right font-medium text-slate-100">
-              {event.favoritedLabel}
-            </dd>
-          </div>
-        </dl>
-      </details>
-    </article>
-  );
-}
-
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-3xl border border-white/10 bg-slate-950/60 p-4 text-left shadow-lg shadow-slate-950/20">
-      <div className="text-xs font-medium uppercase tracking-[0.24em] text-slate-400">
-        {label}
-      </div>
-      <div className="mt-2 text-2xl font-semibold text-white">{value}</div>
-    </div>
   );
 }
 
 function FilterChip({
   href,
   active,
+  muted = false,
+  highlighted = false,
   children,
 }: {
   href: string;
   active: boolean;
+  muted?: boolean;
+  highlighted?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -547,6 +526,10 @@ function FilterChip({
       className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition ${
         active
           ? 'border-amber-300/40 bg-amber-400/15 text-amber-50 shadow-lg shadow-amber-950/20'
+          : muted
+          ? 'border-white/5 bg-white/[0.015] text-slate-500 hover:border-white/10 hover:bg-white/[0.05] hover:text-slate-300'
+          : highlighted
+          ? 'border-sky-400/30 bg-sky-400/10 text-sky-100 hover:border-sky-300/50 hover:bg-sky-400/20'
           : 'border-white/10 bg-white/[0.03] text-slate-200 hover:border-white/20 hover:bg-white/[0.08]'
       }`}
     >
@@ -555,34 +538,75 @@ function FilterChip({
   );
 }
 
-function CollapsibleFilterSection({
-  title,
-  description,
+function FilterGroup({
+  label,
   children,
 }: {
-  title: string;
-  description: string;
+  label: string;
   children: ReactNode;
 }) {
   return (
-    <details
-      open
-      className="rounded-[2rem] border border-white/10 bg-slate-950/50 p-4 shadow-xl shadow-slate-950/30 backdrop-blur-xl sm:p-6"
-    >
-      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-4 marker:hidden">
-        <div>
-          <p className="text-sm font-medium uppercase tracking-[0.24em] text-slate-400">
-            {title}
-          </p>
-          <p className="mt-2 text-sm text-slate-300">{description}</p>
-        </div>
-        <span className="rounded-full border border-white/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.24em] text-slate-300">
-          Toggle
-        </span>
+    <div className="space-y-3">
+      <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">
+        {label}
+      </p>
+      <div className="flex flex-wrap gap-3">{children}</div>
+    </div>
+  );
+}
+
+function NavMenu({
+  label,
+  children,
+}: {
+  label: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <details name="toolbar-menu" className="group relative">
+      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm font-medium text-slate-200 transition marker:hidden hover:border-white/20 hover:bg-white/[0.08] group-open:border-amber-300/40 group-open:bg-amber-400/15 group-open:text-amber-50">
+        {label}
       </summary>
 
-      <div className="mt-4 flex flex-wrap gap-3">{children}</div>
+      <div className="nav-popup fixed inset-0 z-30 m-auto h-fit max-h-[80vh] w-[min(92vw,26rem)] overflow-y-auto rounded-[2rem] border border-white/10 bg-slate-950/95 p-5 shadow-2xl shadow-slate-950/50 backdrop-blur-xl sm:absolute sm:inset-auto sm:left-0 sm:top-full sm:m-0 sm:mt-3 sm:h-auto sm:max-h-none">
+        {children}
+      </div>
     </details>
+  );
+}
+
+function FilterIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-4 w-4"
+      aria-hidden="true"
+    >
+      <path d="M3 4h14M6 10h8M9 16h2" />
+    </svg>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-4 w-4"
+      aria-hidden="true"
+    >
+      <circle cx="9" cy="9" r="6" />
+      <path d="M17 17l-4.35-4.35" />
+    </svg>
   );
 }
 
