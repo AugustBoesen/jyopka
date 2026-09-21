@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import Image from 'next/image';
 
@@ -37,6 +38,22 @@ function toDateKey(date: Date) {
 
 function startOfMonth(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function CloseIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      className="h-4 w-4"
+      aria-hidden="true"
+    >
+      <path d="M5 5l10 10M15 5 5 15" />
+    </svg>
+  );
 }
 
 /** Builds a 6-week (42 day) Monday-first grid covering the given month. */
@@ -274,56 +291,65 @@ export function EventCalendar({ events }: { events: KideEventCard[] }) {
         </div>
       ) : null}
 
-      {modalDayKey ? (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className={`day-modal fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm ${
-            isModalOpen ? 'is-open' : ''
-          }`}
-          onClick={closeModal}
-        >
-          <div
-            className={`day-modal-panel max-h-[80vh] w-full max-w-2xl overflow-y-auto rounded-[2rem] border border-white/10 bg-slate-950/95 p-6 shadow-2xl ${
-              isModalOpen ? 'is-open' : ''
-            }`}
-            onClick={(event) => event.stopPropagation()}
-            onTransitionEnd={(event) => {
-              if (event.target !== event.currentTarget) {
-                return;
-              }
+      {modalDayKey
+        ? createPortal(
+            <div
+              role="dialog"
+              aria-modal="true"
+              className={`day-modal fixed inset-0 z-50 flex items-start justify-center pt-12 lg:pt-[5.25rem] ${
+                isModalOpen ? 'is-open' : ''
+              }`}
+              onClick={closeModal}
+            >
+              <div
+                aria-hidden="true"
+                className="day-modal-backdrop absolute inset-0 bg-slate-950/30 backdrop-blur-xl"
+              />
+              <div
+                className={`day-modal-panel relative z-10 max-h-[calc(100vh-3rem)] w-full max-w-2xl overflow-y-auto rounded-[2rem] border border-white/10 bg-slate-950/95 p-6 mx-2 shadow-2xl lg:max-h-[calc(100vh-5.25rem)] ${
+                  isModalOpen ? 'is-open' : ''
+                }`}
+                onClick={(event) => event.stopPropagation()}
+                onTransitionEnd={(event) => {
+                  if (event.target !== event.currentTarget) {
+                    return;
+                  }
 
-              if (!isModalOpen) {
-                setModalDayKey(null);
-              }
-            }}
-          >
-            <div className="mb-4 flex items-center justify-between gap-4">
-              <h4 className="text-xl font-semibold capitalize text-white">
-                {new Intl.DateTimeFormat('fi-FI', {
-                  weekday: 'long',
-                  day: 'numeric',
-                  month: 'long',
-                  year: 'numeric',
-                }).format(new Date(`${modalDayKey}T00:00:00`))}
-              </h4>
-              <button
-                type="button"
-                onClick={closeModal}
-                className="rounded-full border border-white/10 px-3 py-1 text-sm text-slate-300 transition hover:border-white/20 hover:bg-white/10"
+                  if (!isModalOpen) {
+                    setModalDayKey(null);
+                  }
+                }}
               >
-                Sulje
-              </button>
-            </div>
+                <div className="mb-4 flex items-center justify-between gap-4">
+                  <h4 className="text-xl font-semibold capitalize text-white">
+                    {new Intl.DateTimeFormat('fi-FI', {
+                      weekday: 'long',
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric',
+                    }).format(new Date(`${modalDayKey}T00:00:00`))}
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={closeModal}
+                    aria-label="Sulje"
+                    title="Sulje"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 text-slate-300 transition hover:border-white/20 hover:bg-white/10"
+                  >
+                    <CloseIcon />
+                  </button>
+                </div>
 
-            <div className="flex flex-col gap-4">
-              {selectedEvents.map((event) => (
-                <EventCard key={event.id} event={event} />
-              ))}
-            </div>
-          </div>
-        </div>
-      ) : null}
+                <div className="flex flex-col gap-4 z-50">
+                  {selectedEvents.map((event) => (
+                    <EventCard key={event.id} event={event} />
+                  ))}
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

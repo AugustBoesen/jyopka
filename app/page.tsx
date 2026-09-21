@@ -229,11 +229,11 @@ export default async function Home({ searchParams }: PageProps<'/'>) {
     (selectedStatuses.length > 0 ? 1 : 0);
 
   return (
-    <main className="relative min-h-screen overflow-hidden px-4 py-8 text-slate-100 sm:px-6 lg:px-8 lg:py-12">
+    <main className="relative min-h-screen overflow-hidden px-4 py-3 text-slate-100 sm:px-6 lg:px-8 lg:py-12">
       <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,_rgba(251,191,36,0.16),_transparent_32%),radial-gradient(circle_at_top_right,_rgba(56,189,248,0.16),_transparent_28%),linear-gradient(180deg,_rgba(15,23,42,0.78)_0%,_rgba(2,6,23,0.96)_100%)]" />
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-3">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap justify-evenly w-full items-center gap-2 -mb-2.5 z-40">
             <NavMenu
               label={
                 <>
@@ -282,7 +282,7 @@ export default async function Home({ searchParams }: PageProps<'/'>) {
                   })}
                   active={!selectedOrganizationId}
                 >
-                  All organizations
+                  Kaikki järjestöt
                 </FilterChip>
 
                 {sortedAllOrganizations.map((organization) => {
@@ -416,7 +416,7 @@ export default async function Home({ searchParams }: PageProps<'/'>) {
                   type="search"
                   name="q"
                   defaultValue={selectedSearchQuery ?? ''}
-                  placeholder="Hae tapahtuman nimellä, järjestöllä tai paikalla…"
+                  placeholder="Etsitkö jotain tiettyä?"
                   className="w-full rounded-full border border-white/10 bg-slate-950/60 px-4 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:border-amber-300/40 focus:outline-none focus:ring-2 focus:ring-amber-300/30"
                 />
 
@@ -454,15 +454,28 @@ export default async function Home({ searchParams }: PageProps<'/'>) {
               }
             >
               <div className="space-y-3 text-sm leading-6 text-slate-300">
+                <b>Mikä tämä on?</b>
                 <p>
                   Tälle sivulle suodattuvat Jyväskylän alueen korkeakoulujen
-                  alaisten opiskelijajärjestöjen kide app-tapahtumat. Voit hakea
-                  tapahtumia korkeakoulun, järjestön sekä saatavuuden mukaan.
+                  alaisten opiskelijajärjestöjen kide app-tapahtumat, jotta
+                  niiden tarkastelu olisi helpompaa. Voit hakea tapahtumia
+                  korkeakoulun, järjestön sekä saatavuuden mukaan.
+                </p>
+                <b>Miksi tapahtuma ei näy täällä?</b>
+                <p>
+                  Haku tapahtuu automaattisesti kide appin kautta. Jos tapahtuma
+                  ei näy täällä, se todennäköisesti ei ole kide appissa
+                  saatavilla.
+                </p>
+                <b>Tekninen huomio</b>
+                <p>
+                  Sivu on epävirallinen yksittäisen henkilön vapaa-ajan projekti
+                  eikä ole osa Treanglo Oy:n / Kide.appin virallista palvelua.
                 </p>
                 <p>
-                  Sivu on epävirallinen eikä ole osa Treanglo Oy:n tai
-                  Kide.appin virallista palvelua.
+                  Jos tästä oli sinulle hyötyä, suosittele sivustoa myös muille.
                 </p>
+                <b>Tukekaa järjestötoimintaa osallistumalla tapahtumiin!</b>
               </div>
             </NavMenu>
           </div>
@@ -478,12 +491,12 @@ export default async function Home({ searchParams }: PageProps<'/'>) {
               />
             ) : (
               <h2 className="text-lg font-semibold text-white">
-                JKL Opiskelijajärjestöjen tapahtumat
+                JKL korkeakoulujärjestöjen tapahtumat
               </h2>
             )}
             <div className="text-sm text-slate-400">
-              {visibleEvents.length} event
-              {visibleEvents.length === 1 ? '' : 's'}
+              {visibleEvents.length}{' '}
+              {visibleEvents.length === 1 ? 'tapahtuma' : 'tapahtumaa'}
             </div>
           </div>
 
@@ -493,7 +506,7 @@ export default async function Home({ searchParams }: PageProps<'/'>) {
             </div>
           ) : visibleEvents.length === 0 ? (
             <div className="mt-5 rounded-2xl border border-dashed border-white/10 bg-white/[0.03] p-8 text-center text-sm text-slate-300">
-              No organizations or events match the current filters.
+              Nykyisillä suodattimilla ei löytynyt järjestöjä tai tapahtumia.
             </div>
           ) : (
             <div className="mt-5">
@@ -564,11 +577,21 @@ function NavMenu({
 }) {
   return (
     <details name="toolbar-menu" className="group relative">
-      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm font-medium text-slate-200 transition marker:hidden hover:border-white/20 hover:bg-white/[0.08] group-open:border-amber-300/40 group-open:bg-amber-400/15 group-open:text-amber-50">
-        {label}
+      <summary className="relative z-30 flex h-[34px] w-[50px] shrink-0 cursor-pointer list-none items-center justify-center rounded-t-xl border border-white/10 bg-white/[0.03] text-sm font-medium text-slate-200 transition marker:hidden hover:border-white/20 hover:bg-white/[0.08] group-open:border-amber-300/40 group-open:bg-amber-400/15 group-open:text-amber-50">
+        <span className="group-open:hidden">{label}</span>
+        <span
+          className="hidden group-open:inline-flex"
+          aria-label="Sulje valikko"
+        >
+          <CloseIcon />
+        </span>
       </summary>
 
-      <div className="nav-popup fixed inset-0 z-30 m-auto h-fit max-h-[80vh] w-[min(92vw,26rem)] overflow-y-auto rounded-[2rem] border border-white/10 bg-slate-950/95 p-5 shadow-2xl shadow-slate-950/50 backdrop-blur-xl sm:absolute sm:inset-auto sm:left-0 sm:top-full sm:m-0 sm:mt-3 sm:h-auto sm:max-h-none">
+      <div
+        aria-hidden="true"
+        className="nav-backdrop pointer-events-none fixed inset-0 z-20 bg-slate-950/35 backdrop-blur-md"
+      />
+      <div className="nav-popup fixed inset-x-4 top-12 z-30 max-h-[calc(100vh-4rem)] overflow-y-auto rounded-[2rem] border border-white/10 bg-slate-950/95 p-5 shadow-2xl shadow-slate-950/50 backdrop-blur-xl lg:absolute lg:left-1/2 lg:right-auto lg:top-full lg:mt-3 lg:w-[min(92vw,26rem)]">
         {children}
       </div>
     </details>
@@ -606,6 +629,22 @@ function SearchIcon() {
     >
       <circle cx="9" cy="9" r="6" />
       <path d="M17 17l-4.35-4.35" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      className="h-4 w-4"
+      aria-hidden="true"
+    >
+      <path d="M5 5l10 10M15 5 5 15" />
     </svg>
   );
 }

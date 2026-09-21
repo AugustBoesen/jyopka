@@ -51,7 +51,7 @@ export interface KideEventCard {
   salesLabel: string;
   priceLabel: string;
   availabilityLabel: string;
-  salesState: 'live' | 'upcoming' | 'paused' | 'ended';
+  salesState: 'live' | 'sold-out' | 'upcoming' | 'paused' | 'ended';
   startAt: string | null;
   endAt: string | null;
   /** Local calendar date (YYYY-MM-DD) the event starts on, in the event's own time zone. */
@@ -77,7 +77,7 @@ function formatMoney(valueInCents?: number) {
     return null;
   }
 
-  return new Intl.NumberFormat('en-GB', {
+  return new Intl.NumberFormat('fi-FI', {
     style: 'currency',
     currency: 'EUR',
     minimumFractionDigits: 2,
@@ -96,7 +96,7 @@ function formatDateTime(value: string | undefined, timeZone?: string) {
     return null;
   }
 
-  return new Intl.DateTimeFormat('en-GB', {
+  return new Intl.DateTimeFormat('fi-FI', {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
@@ -117,6 +117,10 @@ function getSalesState(event: KideCompanyEvent): KideEventCard['salesState'] {
   }
 
   if (event.salesStarted || event.salesOngoing) {
+    if (event.availability === 0) {
+      return 'sold-out';
+    }
+
     return 'live';
   }
 
@@ -128,31 +132,28 @@ function buildPriceLabel(event: KideCompanyEvent) {
   const maximum = formatMoney(event.maxPrice?.eur);
 
   if (!minimum && !maximum) {
-    return 'Free entry';
+    return 'Ilmainen';
   }
 
   if (minimum && maximum && minimum !== maximum) {
     return `${minimum} - ${maximum}`;
   }
 
-  return minimum ?? maximum ?? 'Pricing unavailable';
+  return minimum ?? maximum ?? 'Hinta ei saatavilla';
 }
 
 function buildSalesLabel(event: KideCompanyEvent) {
-  if (event.salesPaused) {
-    return 'Sales paused';
-  }
-
-  if (event.salesEnded) {
-    return 'Sales ended';
-  }
-
-  if (event.salesStarted || event.salesOngoing) {
-    return 'Sales live';
+  if (
+    event.salesPaused ||
+    event.salesEnded ||
+    event.salesStarted ||
+    event.salesOngoing
+  ) {
+    return '';
   }
 
   const salesStart = formatDateTime(event.dateSalesFrom, event.timeZone);
-  return salesStart ? `Sales open ${salesStart}` : 'Upcoming';
+  return salesStart ? `Myynti avautuu ${salesStart}` : 'Tulossa';
 }
 
 function formatDateKey(value: string | undefined, timeZone?: string) {
@@ -178,7 +179,7 @@ function buildWindowLabel(event: KideCompanyEvent) {
   return (
     formatDateTime(event.dateActualFrom, event.timeZone) ??
     formatDateTime(event.dateActualUntil, event.timeZone) ??
-    'Date not published'
+    'Päivämäärää ei julkaistu'
   );
 }
 
@@ -190,19 +191,21 @@ function mapEvent(
   return {
     id: event.id,
     dateKey: formatDateKey(event.dateActualFrom, event.timeZone),
-    title: event.name ?? 'Untitled event',
+    title: event.name ?? 'Nimetön tapahtuma',
     url: `https://kide.app/events/${event.id}/details`,
     organizationId: organization.id,
     organizationName: organization.name,
     organizationLogoUrl,
-    place: event.place ?? 'Location unavailable',
+    place: event.place ?? 'Sijaintia ei saatavilla',
     windowLabel: buildWindowLabel(event),
     salesLabel: buildSalesLabel(event),
     priceLabel: buildPriceLabel(event),
     availabilityLabel:
       typeof event.availability === 'number'
-        ? `${event.availability}`
-        : 'Availability unavailable',
+        ? event.availability >= 100
+          ? '100+'
+          : `${event.availability}`
+        : 'Saatavuus ei tiedossa',
     salesState: getSalesState(event),
     startAt: event.dateActualFrom ?? null,
     endAt: event.dateActualUntil ?? null,
@@ -223,7 +226,7 @@ export async function fetchKideOrganizationFeeds(
 
       if (!response.ok) {
         throw new Error(
-          `Kide responded with ${response.status} for ${organization.name}`,
+          `Kide palautti virhekoodin ${response.status} kohteelle ${organization.name}`,
         );
       }
 
@@ -267,7 +270,7 @@ export async function fetchKideOrganizationFeeds(
       error:
         response.reason instanceof Error
           ? response.reason.message
-          : `Failed to load ${organization.name}`,
+          : `Kohteen ${organization.name} lataaminen epäonnistui`,
     } satisfies KideOrganizationFeed;
   });
 }

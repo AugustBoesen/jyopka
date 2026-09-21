@@ -63,6 +63,37 @@ details[open] > .nav-popup {
   }
 }
 
+@media (min-width: 1024px) {
+  .nav-popup {
+    transform: translate(-50%, 0.75rem);
+  }
+
+  details[open] > .nav-popup {
+    transform: translate(-50%, 0);
+  }
+
+  @starting-style {
+    details[open] > .nav-popup {
+      transform: translate(-50%, 0.75rem);
+    }
+  }
+}
+
+.nav-backdrop {
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+details[open] > .nav-backdrop {
+  opacity: 1;
+}
+
+@starting-style {
+  details[open] > .nav-backdrop {
+    opacity: 0;
+  }
+}
+
 .day-modal {
   opacity: 0;
   transition: opacity 200ms ease;
